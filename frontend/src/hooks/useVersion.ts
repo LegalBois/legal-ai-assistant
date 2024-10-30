@@ -13,7 +13,7 @@ export const useVersion = (): VersionInfo => {
   useEffect(() => {
     const fetchApiVersion = async () => {
       try {
-        const response = await fetch(`${API_HOST}/api/openapi.json`);
+        const response = await fetch(`${API_HOST}/openapi.json`);
         const data = await response.json();
         setApiVersion(data.info.version);
       } catch (error) {

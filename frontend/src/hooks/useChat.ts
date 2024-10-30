@@ -72,7 +72,7 @@ export const useChat = (onAddMessage?: () => void, onHistoryLoad?: () => void) =
     async (message: TMessage): Promise<TMessage> => {
       // Create a new RemoteRunnable with updated headers
       const remoteChain = new RemoteRunnable({
-        url: `${API_HOST}/api/${clientId}`,
+        url: `${API_HOST}/${clientId}`,
         options: {
           headers: {
             user_id: userId,
@@ -87,7 +87,7 @@ export const useChat = (onAddMessage?: () => void, onHistoryLoad?: () => void) =
       const startTime = Date.now();
 
       const logStream = await remoteChain.stream(
-        { human_input: message.text },
+        message.text,
         {
           // Additional options if needed
         },
@@ -100,9 +100,11 @@ export const useChat = (onAddMessage?: () => void, onHistoryLoad?: () => void) =
 
         for await (const chunk of logStream) {
           if (!currentState) {
-            currentState = chunk;
+            currentState = chunk.content;
+            console.log('Initial state:', currentState);
           } else {
-            currentState = currentState.concat(chunk);
+            currentState = currentState.concat(chunk.content);
+            console.log('Initial state:', currentState);
             if (!isBotMessageAdded) {
               setIsBotTyping(true);
               isBotMessageAdded = true;

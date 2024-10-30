@@ -1,0 +1,35 @@
+# Quick Start:
+#
+# pip install pre-commit
+# pre-commit install && pre-commit install -t pre-push
+# pre-commit run --all-files
+#
+# To Skip Checks:
+python_version: &default_python_version python3.11
+
+default_language_version:
+  python: *default_python_version
+# git commit --no-verify
+fail_fast: false
+
+
+
+repos:
+  # Ruff
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: "v0.0.259"
+    hooks:
+      - id: ruff
+
+  # Black
+  - repo: https://github.com/psf/black
+    rev: "23.1.0"
+    hooks:
+      - id: black
+
+  # MyPy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: "v1.9.0"
+    hooks:
+      - id: mypy
+        args: [--python-version=3.10, --explicit-package-bases]
