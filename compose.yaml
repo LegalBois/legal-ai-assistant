@@ -1,0 +1,23 @@
+
+services:
+  frontend:
+    image: 'legal-ai-frontend:latest'
+    networks:
+      - default
+    restart: always
+    ports:
+      - "3000:5173"
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+
+  backend:
+    image: 'legal-ai-backend:latest'
+    networks:
+      - default
+    restart: always
+    ports:
+      - "8000:8000"
+    build:
+      context: backend
+      dockerfile: Dockerfile
