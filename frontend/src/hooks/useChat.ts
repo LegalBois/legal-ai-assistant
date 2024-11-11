@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-const API_HOST = import.meta.env.VITE_API_HOST ?? '';
+const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:80';
 
 export const useChat = (onAddMessage?: () => void, onHistoryLoad?: () => void) => {
   const [isBotTyping, setIsBotTyping] = useState(false);

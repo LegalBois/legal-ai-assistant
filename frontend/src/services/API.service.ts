@@ -1,7 +1,7 @@
 import { TServerMessage } from '@/components/messages/types';
 import { TVoiceAudioRequestBody, TVoiceTranscription, TVoiceTranscriptionRequestBody } from '@/components/voice/types';
 
-const API_HOST = import.meta.env.VITE_API_HOST ?? '';
+const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:80';
 
 export type TAPIError = {
   detail: {

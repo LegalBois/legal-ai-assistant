@@ -2,22 +2,24 @@
 services:
   frontend:
     image: 'legal-ai-frontend:latest'
-    networks:
-      - default
+    network_mode: "host"
     restart: always
     ports:
       - "5173:5173"
     build:
       context: frontend
       dockerfile: Dockerfile
+    environment:
+      VITE_API_HOST: 'http://localhost:80'
 
   backend:
     image: 'legal-ai-backend:latest'
-    networks:
-      - default
     restart: always
+    network_mode: "host"
     ports:
       - "80:80"
+    env_file:
+      - .env
     build:
       context: backend
       dockerfile: Dockerfile
