@@ -5,11 +5,20 @@ on:
     branches:
       - cicd
 
+
 jobs:
-  deploy:
+  prepare-environment:
     runs-on: production
     steps:
+      - name: checkout repo
+        uses: actions/checkout@v4
       - name: Create .env file
-        run: echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+        run: |
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+
+  deploy:
+    runs-on: production
+    needs: [prepare-environment]
+    steps:
       - name: Run Docker Compose
         run: docker compose up -d --build
