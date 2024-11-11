@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from src.config import settings
+from app.config import settings
 
 
 
