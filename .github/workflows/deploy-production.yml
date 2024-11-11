@@ -1,8 +1,5 @@
 name: Publish to production server
 
-on:
-  workflow_dispatch:
-
 
 jobs:
   deploy:
