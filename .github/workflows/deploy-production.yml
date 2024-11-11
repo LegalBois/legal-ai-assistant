@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: production
     steps:
       - name: Create .env file
         run: echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
