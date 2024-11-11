@@ -1,5 +1,9 @@
 name: Publish to production server
 
+on:
+  push:
+    branches:
+      - cicd
 
 jobs:
   deploy:
