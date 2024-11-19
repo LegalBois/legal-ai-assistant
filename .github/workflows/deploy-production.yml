@@ -15,9 +15,11 @@ jobs:
       - name: Create .env file
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          echo "OPENAI_PROXY=${{ secrets.OPENAI_PROXY }}" >> .env
           echo "VITE_API_HOST=${{ secrets.VITE_API_HOST }}" >> .env
           echo "VITE_API_VERSION=${{ secrets.VITE_API_VERSION }}" >> .env
           echo "VITE_CLIENT_ID=${{ secrets.VITE_CLIENT_ID }}" >> .env
+          
 
   deploy:
     runs-on: production
