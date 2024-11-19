@@ -95,5 +95,9 @@ export default defineConfig(({ mode, command }) => {
         plugins: postCSSPlugins,
       },
     },
+    server: {
+      host: '0.0.0.0', // Make the server accessible on all interfaces
+      port: 5173, // Set the port to 5173 (or your desired port)
+    },
   };
 });

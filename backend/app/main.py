@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from langserve import add_routes
 
-from src import __version__
-from src.legal_agent.chain import legal_ai_chain
+from app import __version__
+from app.legal_agent.chain import legal_ai_chain
 
 app = FastAPI(
     title="Legal AI Server",

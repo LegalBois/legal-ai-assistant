@@ -1,19 +1,20 @@
-# syntax=docker/dockerfile:1
-ARG NODE_VERSION=20.13.1
+# Use an official Node.js runtime as the base image
+FROM node:20.13.1-buster AS build
 
-FROM node:${NODE_VERSION}-alpine
+# Set the working directory inside the container
+WORKDIR /app
 
-ENV NODE_ENV production
+# Copy package.json and package-lock.json (if present)
+COPY package*.json ./
 
+# Install project dependencies
+RUN npm install
 
-WORKDIR /usr/src/app
-
-RUN --mount=type=bind,source=package.json,target=package.json \
-    --mount=type=bind,source=package-lock.json,target=package-lock.json \
-    --mount=type=cache,target=/root/.npm \
-    npm ci
-
+# Copy the rest of the application code
 COPY . .
 
-# Run the application.
-CMD npm run dev
+# Expose the port that the app will run on
+EXPOSE 5173
+
+# Run the development server when the container starts
+CMD ["npm", "run", "dev"]

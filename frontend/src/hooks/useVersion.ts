@@ -5,7 +5,7 @@ type VersionInfo = {
   apiVersion: string | null;
 };
 
-const API_HOST = import.meta.env.VITE_API_HOST ?? '';
+const API_HOST = import.meta.env.VITE_API_HOST || 'http://localhost:80';
 
 export const useVersion = (): VersionInfo => {
   const [apiVersion, setApiVersion] = useState<string | null>(null);
