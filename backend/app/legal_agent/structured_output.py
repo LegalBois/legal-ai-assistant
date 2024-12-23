@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -10,8 +10,8 @@ class RAGQueries(BaseModel):
     """
 
     keyinfo: Optional[str] = Field(description="Ключевая информация")
-    rephrase: Optional[List[str]] = Field(
-        description="Список из двух различных запросов в векторную базу данных, содержащую судебные дела",
+    rephrase: Optional[str] = Field(
+        description="Перефразированный запрос в векторную базу данных, содержащую судебные дела",
     )
     codex: Optional[
         Literal["Гражданский кодекс", "Уголовный кодекс", "Административный кодекс"]

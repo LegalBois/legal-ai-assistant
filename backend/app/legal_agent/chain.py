@@ -71,6 +71,8 @@ chain_1 = prompt_1 | llm_1
 # ===== Retrieval and Final Generation =====
 logger.info("Setting up ChromaDB and retriever.")
 
+# Set up ChromaDB with legal practices docs
+# Note: this DB should already be initialized
 persistent_client = chromadb.PersistentClient(path="/app/storage")
 legal_practices_store = Chroma(
     client=persistent_client,
@@ -78,6 +80,8 @@ legal_practices_store = Chroma(
     embedding_function=emb_model,
 )
 
+# Create retriever
+# Note: k = 3, because we pick the most relevant `unique` doc for each query (we have 3 queries)
 legal_practices_retriever = legal_practices_store.as_retriever(
     search_type="similarity", search_kwargs={"k": 3}
 )
@@ -85,20 +89,34 @@ legal_practices_retriever = legal_practices_store.as_retriever(
 
 @traceable
 def create_queries(inputs: dict) -> dict:
+    """
+    Creates 2 queries for retriever:
+        1. Original user query
+        2. Key info + query rephrase
+
+    Params:
+        `inputs` - output from previous LangChain Runnable in chain
+    """
     logger.info("Creating queries from inputs.")
     original_query: str = inputs["query"]
     llm_processed: RAGQueries = inputs["response_1"].response
 
-    queries = [original_query]
-    for s in llm_processed.rephrase:
-        queries.append(llm_processed.keyinfo + "\n" + s)
+    queries = [original_query, llm_processed.keyinfo + "\n" + llm_processed.rephrase]
     logger.debug(f"Generated queries: {queries}")
     return {"queries": queries, "codex_filter": llm_processed.codex}
 
 
 @traceable
 def batch_query(inputs: dict) -> dict:
+    """
+    Makes batch invoke of retriever for each query. 
+    Also set the filter for codex (if it's not None).
+
+    Params:
+        `inputs` - output from previous LangChain Runnable in chain
+    """
     logger.info("Executing batch queries against the retriever.")
+    # Add/remove codex filter for retriever
     codex_poss_values = ["А", "АГ", "АУ", "АГУ", "Г", "ГУ", "У"]
     if inputs["codex_filter"] and inputs["codex_filter"][0] in "АГУ":
         legal_practices_retriever.search_kwargs["filter"] = {
@@ -116,12 +134,23 @@ def batch_query(inputs: dict) -> dict:
 
 @traceable
 def prepare_docs(inputs) -> dict:
+    """
+    Post-proce1ssing of retrieved relevant docs.
+    Steps:
+        1. Picks up the most relevant docs for each query w/o duplicates
+        2. Add `theme` from metadata of doc to its content
+        3. Merges all docs in one string
+
+    Params:
+        `inputs` - output from previous LangChain Runnable in chain
+    """
     logger.info("Preparing documents by post-processing retrieved results.")
     relevant_docs = inputs["relevant_docs"]
+    # Pick top document for each query without duplicates
     seen_uids = set()
     top_docs = []
 
-    for query_docs in relevant_docs:
+    for query_docs in relevant_docs:  # relevant_docs is a list of lists (docs per query)
         for doc in query_docs:
             uid: str = doc.metadata.get("uid")
             if uid not in seen_uids:
@@ -129,10 +158,12 @@ def prepare_docs(inputs) -> dict:
                 top_docs.append(doc)
                 break
 
+    # Merge `theme` into `page_content`
     for doc in top_docs:
         theme = doc.metadata.get("theme", "")
         doc.page_content = f"{theme}\n{doc.page_content}"
-
+    
+    # Merge all docs
     context = "\n\n".join(doc.page_content for doc in top_docs)
     logger.info("Documents prepared and merged into context.")
     return {"context": context, "orig_query": inputs["orig_query"]}
@@ -162,6 +193,14 @@ chain_2 = (
 
 @traceable
 def route(inputs) -> str | Runnable:
+    """
+    Swithes behavior of pipeline based on query classification:
+        1. If LLM classify query as chit-chat - we just return the text response without doing RAG
+        2. Otherwise, if query belongs to legal field - execute `chain_2` for RAG
+
+    Params:
+        `inputs` - output from previous LangChain Runnable in chain
+    """
     logger.info("Routing query based on classification.")
     if isinstance(inputs["response_1"].response, ChitChatResponse):
         logger.info("Query classified as chit-chat.")
@@ -171,4 +210,16 @@ def route(inputs) -> str | Runnable:
         return chain_2
 
 
-legal_ai_chain = {"response_1": chain_1, "query": itemgetter("query")} | RunnableLambda(route)
+def wrap_input(input):
+    """
+    Костыль
+    Wrap the single input into a dictionary with the key 'input'.
+    """
+    return {"query": input}
+
+
+legal_ai_chain = (
+    RunnableLambda(wrap_input)
+    | {"response_1": chain_1, "query": itemgetter("query")}
+    | RunnableLambda(route)
+)
