@@ -203,19 +203,23 @@ def route(inputs) -> str | Runnable:
     """
     logger.info("Routing query based on classification.")
     resp = inputs.get("response_1", None)
-    if not resp:
+    if not resp or not resp.response:
         return "Пожалуйста, уточните ваш запрос."
     elif isinstance(resp.response, ChitChatResponse):
-        logger.info("Query classified as chit-chat.")
-        return resp.response.response
-    else:
-        logger.info("Query classified as legal; executing chain_2.")
-        return chain_2
+        if resp.response.response is not None:
+            logger.info("Query classified as chit-chat.")
+            return resp.response.response
+    elif isinstance(resp.response, RAGQueries):
+        if resp.response.keyinfo is not None and resp.response.rephrase is not None:
+            logger.info("Query classified as legal; executing chain_2.")
+            return chain_2
+    
+    return "Пожалуйста, уточните ваш запрос."
 
 
 def wrap_input(input):
     """
-    Костыль
+    Little helper function.
     Wrap the single input into a dictionary with the key 'input'.
     """
     return {"query": input}
