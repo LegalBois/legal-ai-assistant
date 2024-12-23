@@ -15,9 +15,12 @@ services:
     image: 'legal-ai-backend:latest'
     restart: always
     ports:
-      - "80:80"
+      - "8082:80"
     env_file:
       - .env
     build:
       context: backend
       dockerfile: Dockerfile
+    volumes:
+      - ./storage:/app/storage
+      - ./emb_model:/app/emb_model

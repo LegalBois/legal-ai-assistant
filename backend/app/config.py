@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class AppSettings(BaseSettings):
-    OPENAI_API_KEY: str
+    MISTRAL_API_KEY: str
 
 
 
-settings = AppSettings()
+settings = AppSettings(MISTRAL_API_KEY=os.getenv("MISTRAL_API_KEY"))

@@ -35,7 +35,6 @@ RUN apt-get update && \
 
 # Install Poetry
 RUN pip install poetry==1.4.2
-
 FROM python-base AS requirement_install
 WORKDIR $PYSETUP_PATH
 COPY ./poetry.lock ./pyproject.toml ./
@@ -45,6 +44,11 @@ RUN poetry install --no-root --only main
 FROM requirement_install AS production
 WORKDIR /app
 
-COPY ./prestart.sh /app/prestart.sh
 COPY . .
 EXPOSE 80
+
+# Volume with ChromaDB collections storage
+VOLUME /app/storage/
+
+# Volume with pre-loaded embedding model
+VOLUME /app/emb_model/
