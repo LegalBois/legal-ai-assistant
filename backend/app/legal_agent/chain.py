@@ -202,9 +202,12 @@ def route(inputs) -> str | Runnable:
         `inputs` - output from previous LangChain Runnable in chain
     """
     logger.info("Routing query based on classification.")
-    if isinstance(inputs["response_1"].response, ChitChatResponse):
+    resp = inputs.get("response_1", None)
+    if not resp:
+        return "Пожалуйста, уточните ваш запрос."
+    elif isinstance(resp.response, ChitChatResponse):
         logger.info("Query classified as chit-chat.")
-        return inputs["response_1"].response.response
+        return resp.response.response
     else:
         logger.info("Query classified as legal; executing chain_2.")
         return chain_2
