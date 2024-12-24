@@ -1,64 +1,35 @@
-# legal-ai-assistant
+# Databases pipeline
 
-## How to set up docker compose
+Описание пайплайна по созданию векторных БД, которые используются для ИИ-ассистента.
 
-1. Move volumes with embedding model (`/emb_model`) and with vector storage (`/storage`) in root directory.
+## Legal practices
 
-2. Run `docker compose build`
+БД с документами по судебным практикам. Взяты с сайта [sudact.ru](https://sudact.ru/) из раздела "Судебная практика".
 
-3. Run `docker compose up`
+С помощью [скриптов](/practices/parsing/) было скачено ~50k практик по административным, гражданским и уголовным делам.
 
-## How to run the project
+Обработка документов (преобразование HTML в txt): [practice_preprocessing](/practices/practice_preprocessing.ipynb).
 
-1. Clone the repository
-2. Add .env file to the backend folder with the following content:
+Затем была произведена суммаризация этих документов с помощью модели `mistral-large`. Скрипты находятся в [тут](/practices/summarization/).
 
-```
-MISTRAL_API_KEY=<YOUR_MISTRAL_API_KEY>
-```
+Модель для расчета эмбеддингов: `deepvk/USER-bge-m3`. [Расчет эмбеддингов](/practices/calculate_embeddings.ipynb).
 
-3. Run the following commands for backend:
+Инициализация векторной базы данных `ChromaDB`: [init_practice_collection](/practices/init_practice_collection.ipynb).
 
-3.1. **Install Poetry:**
-   If you haven't already, install Poetry by following the instructions from the [Poetry documentation](https://python-poetry.org/docs/#installation).
+## Legal docs
 
-3.2 **Install Project Dependencies:**
-   Navigate to the root directory of the project and run:
 
-   ```bash
-   poetry install
-   ```
 
-3.3 **Activate the Virtual Environment:**
+## Docker compose
 
-   ```bash
-   poetry shell
-   ```
+В `docker-compose` для поднятия приложения монтируется 2 volume:
 
-3.4 Local development usage
+1. `/emb_model` - папка с моделью для создания эмбеддингов. Заранее загружена с помощью
 
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+    ```cmd
+    mkdir emb_model &&
+    cd emb_model &&
+    git clone https://huggingface.co/deepvk/USER-bge-m3
+    ```
 
-4. Run the following commands for frontend:
-
-Install Node.js from [Node.js website](https://nodejs.org/en/), if you haven't already.
-
-4.1 Navigate to the frontend folder
-
-   ```bash
-   cd frontend
-   ```
-
-4.2 Install the dependencies
-
-   ```bash
-    npm install
-   ```
-
-4.3 Start the frontend
-
-   ```bash
-    npm run dev
-   ```
+2. `/storage` - папка с `ChromaDB collections`, в которых есть как коллекия с судебными практиками, так с юридическими документами
