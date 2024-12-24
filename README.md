@@ -14,11 +14,17 @@
 
 Модель для расчета эмбеддингов: `deepvk/USER-bge-m3`. [Расчет эмбеддингов](/practices/calculate_embeddings.ipynb).
 
-Инициализация векторной базы данных `ChromaDB`: [init_practice_collection](/practices/init_practice_collection.ipynb).
+Инициализация векторной базы данных `ChromaDB`: [init_practice_collection](/practices/create_practice_collection.ipynb).
 
 ## Legal docs
 
+БД с юридическими документами. Содержит [основные кодексы](/docs/codexes.json) и [основные законы](/docs/laws.json) РФ. Данные взяты с [sudact.ru](https://sudact.ru/law/?law-txt=&law-date_from=&law-date_to=).
 
+[Анализ документов и их препроцессинг (разделение на чанки, обработка метаданных)](/docs/preprocessing.ipynb).
+
+Модель для расчета эмбеддингов та же: `deepvk/USER-bge-m3`. [Расчет эмбеддингов](/docs/calculate_embeddings.ipynb).
+
+Добавление коллекции с юридическими документами в векторную БД `ChromaDB`: [create_docs_collection](/docs/create_docs_collection.ipynb).
 
 ## Docker compose
 
