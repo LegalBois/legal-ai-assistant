@@ -1,8 +1,45 @@
 # legal-ai-assistant
 
+## Description
+
+### [Frontend](/frontend/)
+
+...
+
+### [Backend](/backend/)
+
+Бэк реализован с помощью `langserve`.
+
+### [RAG](/backend/app/legal_agent/)
+
+* Эмбеддинг модель: `deepvk/USER-bge-m3`
+* LLM: `mistral-large-latest`
+* DB: `ChromaDB`, ~50k документов [судебных практик](/https://sudact.ru/), ~50 юридических документов (основные [кодексы](https://github.com/LegalBois/legal-ai-assistant/blob/databases/docs/codexes.json), [законы](https://github.com/LegalBois/legal-ai-assistant/blob/databases/docs/laws.json))
+
+Пайплайн RAG системы:
+
+![rag](/media/legal_rag.png)
+
+#### Данные
+
+[Описание](https://github.com/LegalBois/legal-ai-assistant/tree/databases) - пайплайн для получения, обработки данных, а также создания векторной базы данных `ChromaDB` с двумя отдельными коллекциями:
+
+1. Коллекция с юридическими документами: основными кодексами и законами
+2. Коллекция с документами судебных практик
+
 ## How to set up docker compose
 
 1. Move volumes with embedding model (`/emb_model`) and with vector storage (`/storage`) in root directory.
+
+   * `/emb_model` creation:
+
+   ```cmd
+   mkdir emb_model &&
+   cd emb_model &&
+   git clone https://huggingface.co/deepvk/USER-bge-m3
+   ```
+
+   * `/storage/` creation: description [here](https://github.com/LegalBois/legal-ai-assistant/tree/databases?tab=readme-ov-file#databases-pipeline)
 
 2. Run `docker compose build`
 

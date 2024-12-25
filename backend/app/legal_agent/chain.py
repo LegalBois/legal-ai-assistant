@@ -1,232 +1,296 @@
-import json
 import logging
-from operator import itemgetter
+from time import sleep, time
 
 import chromadb
+import nltk
+from langchain.retrievers import EnsembleRetriever
 from langchain_chroma import Chroma
-from langchain_core.prompts import ChatPromptTemplate, FewShotChatMessagePromptTemplate
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_community.retrievers import BM25Retriever
+from langchain_core.prompts import (
+    PromptTemplate,
+)
+from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_mistralai.chat_models import ChatMistralAI
 from langsmith import traceable
+from nltk.tokenize import word_tokenize
 
 from ..config import settings
-from .structured_output import ChitChatResponse, FirstResponse, RAGQueries
+from .structured_output import Rephrases
 
-# ===== Logging Configuration =====
+# STEP 0
+# Logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# ===== Initialization =====
-logger.info("Initializing models and settings.")
-models_settings = {
-    "llm": {
-        "model_name": "mistral-large-latest",
-        "api_key": settings.MISTRAL_API_KEY,
-        "temperature": 0.7,
-    },
-    "emb_model": {"model_name": "deepvk/USER-bge-m3"},
+# Set up little cache
+mem = {
+    "query": "",
+    "last_mistral_api_req": 0,
 }
 
-llm = ChatMistralAI(**models_settings["llm"])
 
-emb_model_path = "/app/emb_model/USER-bge-m3/"
-logger.info(
-    f"Load locally saved embedding model: {models_settings['emb_model']} from {emb_model_path}."
+@traceable
+def check_rps(x):
+    """
+    Monitors time between Mistral API calls, in order to not exceed RPS.
+    """
+    rps_limit = 2  # sec
+    logger.info("Checking Mistral RPS violations...")
+
+    time_since_last_call = time() - mem.get("last_mistral_api_req", 0)
+    logger.info("Time since last Mistral API request: %.2f seconds", time_since_last_call)
+
+    if time_since_last_call < rps_limit:
+        sleep_duration = rps_limit - time_since_last_call
+        logger.info("RPS limit exceeded, sleeping for %.2f seconds", sleep_duration)
+        sleep(sleep_duration)
+
+    mem["last_mistral_api_req"] = time()
+    logger.info("Continue RAG pipeline.")
+
+    return x
+
+
+# STEP 1: Query classification
+# Classify user query on whether it requires legal assistance
+# If query doesnt requires assistance, then just answer w/o going to the vector DB for context
+
+# Classification model
+cls_llm = ChatMistralAI(
+    api_key=settings.MISTRAL_API_KEY,
+    model_name="mistral-large-latest",
+    temperature=0.6,
+    streaming=False,
+    max_tokens=5,
 )
+
+# Load system prompt for classification
+with open("/app/app/legal_agent/prompts/cls_prompt.txt", "r") as f:
+    cls_prompt = PromptTemplate.from_template(f.read())
+
+
+def prepare_input(query: str):
+    """
+    Helper function, which save original query and wrap it into dict.
+    """
+    mem["query"] = query
+    return {"input": query}
+
+
+cls_chain = prepare_input | cls_prompt | check_rps | cls_llm
+
+# STEP 2-0: Chat response on non-legal assistance request
+
+# Chat response model
+chat_llm = ChatMistralAI(
+    api_key=settings.MISTRAL_API_KEY,
+    model_name="mistral-large-latest",
+    temperature=0.8,
+    streaming=True,
+)
+
+# Load system prompt
+with open("/app/app/legal_agent/prompts/chat_prompt.txt", "r") as f:
+    chat_prompt = f.read()
+
+non_legal_chat_chain = RunnableLambda(lambda x: chat_prompt + mem["query"]) | check_rps | chat_llm
+
+# STEP 2-1-0: Creating queries for retrieval
+
+# Queries generation model
+queries_gen_llm = ChatMistralAI(
+    api_key=settings.MISTRAL_API_KEY,
+    model_name="mistral-large-latest",
+    temperature=0.8,
+    streaming=False,
+).with_structured_output(Rephrases)
+
+# Load system prompt
+with open("/app/app/legal_agent/prompts/queries_gen_prompt.txt", "r") as f:
+    queries_gen_prompt = PromptTemplate.from_template(f.read())
+
+
+@traceable
+def queries_validation(rephrases: Rephrases | None) -> list[str]:
+    """
+    Validates the generated rephrases and construct the list of queries for retrieval.
+    """
+    logger.info("Starting validation of generated rephrases")
+    try:
+        if rephrases and rephrases.rephrases:
+            logger.info(f"Rephrases are valid: {rephrases.rephrases}")
+            rephrases.rephrases.append(mem["query"])
+            return rephrases.rephrases
+        else:
+            logger.info(
+                f"Rephrases not valid, we'll use only original user query for retrieval: {mem['query']}"
+            )
+            return [mem["query"]]
+    except Exception as e:
+        logger.error("An error occurred during validation of rephrases: ", e, exc_info=True)
+        return [mem["query"]]
+
+
+queries_gen_chain = (
+    RunnableLambda(lambda x: queries_gen_prompt.invoke({"input": mem["query"]}))
+    | check_rps
+    | queries_gen_llm
+    | queries_validation
+)
+
+# STEP 2-1-1: Retrieval and post-processing
+
+# Load embedding model
+emb_model_path = "/app/emb_model/USER-bge-m3/"
+logger.info(f"Load locally saved embedding model: USER-bge-m3 from {emb_model_path}.")
 emb_model = HuggingFaceEmbeddings(model_name=emb_model_path)
 logger.info("Successfully load embedding model.")
 
-# ===== Query Analysis =====
-logger.info("Loading prompts and examples for query analysis.")
-with open("/app/app/legal_agent/prompts/system_prompt_1.txt") as f:
-    system_prompt_1 = f.read()
-
-with open("/app/app/legal_agent/prompts/examples_1.json") as f:
-    examples_1 = json.load(f)
-
-example_prompt_1 = ChatPromptTemplate.from_messages(
-    [
-        ("user", "{input}"),
-        ("assistant", "{output}"),
-    ]
-)
-
-few_shot_prompt_1 = FewShotChatMessagePromptTemplate(
-    example_prompt=example_prompt_1,
-    examples=examples_1,
-)
-
-prompt_1 = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt_1),
-        few_shot_prompt_1,
-        ("user", "{query}"),
-    ]
-)
-
-llm_1 = llm.with_structured_output(FirstResponse)
-chain_1 = prompt_1 | llm_1
-
-# ===== Retrieval and Final Generation =====
-logger.info("Setting up ChromaDB and retriever.")
-
-# Set up ChromaDB with legal practices docs
-# Note: this DB should already be initialized
-persistent_client = chromadb.PersistentClient(path="/app/storage")
-legal_practices_store = Chroma(
-    client=persistent_client,
+# Set up ChromaDB
+logger.info("Starting ChromaDB setup...")
+chroma_client = chromadb.PersistentClient(path="/app/storage")
+practices_store = Chroma(
+    client=chroma_client,
     collection_name="legal_practices",
     embedding_function=emb_model,
 )
+docs_store = Chroma(
+    client=chroma_client,
+    collection_name="legal_docs",
+    embedding_function=emb_model,
+)
 
-# Create retriever
-# Note: k = 3, because we pick the most relevant `unique` doc for each query (we have 3 queries)
-legal_practices_retriever = legal_practices_store.as_retriever(
+nltk.download("punkt_tab")  # Tokenizer for BM-25 retriever
+logger.info("Creating retrievers... (typically ~2-3 min)")
+
+# For legal practices collection
+practices_simil_retr = practices_store.as_retriever(
     search_type="similarity", search_kwargs={"k": 3}
 )
+practices_data_for_bm25 = practices_store.get(include=["documents", "metadatas"])
+practices_bm25_retr = BM25Retriever.from_texts(
+    texts=practices_data_for_bm25["documents"],
+    metadatas=practices_data_for_bm25["metadatas"],
+    preprocess_func=word_tokenize,
+    k=1,
+)
+del practices_data_for_bm25  # Release memory
+practices_ensemble_retriever = EnsembleRetriever(
+    retrievers=[practices_simil_retr, practices_bm25_retr],
+    weights=[0.5, 0.5],
+)
+
+# For legal docs (codexes and laws) collection
+docs_simil_retr = docs_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+docs_data_for_bm25 = docs_store.get(include=["documents", "metadatas"])
+docs_bm25_retr = BM25Retriever.from_texts(
+    texts=docs_data_for_bm25["documents"],
+    metadatas=docs_data_for_bm25["metadatas"],
+    preprocess_func=word_tokenize,
+    k=1,
+)
+del docs_data_for_bm25  # Release memory
+docs_ensemble_retriever = EnsembleRetriever(
+    retrievers=[docs_simil_retr, docs_bm25_retr],
+    weights=[0.5, 0.5],
+)
+logger.info("Vector DB and retrievers successfully loaded.")
 
 
 @traceable
-def create_queries(inputs: dict) -> dict:
+def context_post_processing(retrieve_results: dict) -> dict:
     """
-    Creates 2 queries for retriever:
-        1. Original user query
-        2. Key info + query rephrase
-
-    Params:
-        `inputs` - output from previous LangChain Runnable in chain
-    """
-    logger.info("Creating queries from inputs.")
-    original_query: str = inputs["query"]
-    llm_processed: RAGQueries = inputs["response_1"].response
-
-    queries = [original_query, llm_processed.keyinfo + "\n" + llm_processed.rephrase]
-    logger.debug(f"Generated queries: {queries}")
-    return {"queries": queries, "codex_filter": llm_processed.codex}
-
-
-@traceable
-def batch_query(inputs: dict) -> dict:
-    """
-    Makes batch invoke of retriever for each query. 
-    Also set the filter for codex (if it's not None).
-
-    Params:
-        `inputs` - output from previous LangChain Runnable in chain
-    """
-    logger.info("Executing batch queries against the retriever.")
-    # Add/remove codex filter for retriever
-    codex_poss_values = ["А", "АГ", "АУ", "АГУ", "Г", "ГУ", "У"]
-    if inputs["codex_filter"] and inputs["codex_filter"][0] in "АГУ":
-        legal_practices_retriever.search_kwargs["filter"] = {
-            "codex": {"$in": [val for val in codex_poss_values if inputs["codex_filter"][0] in val]}
-        }
-        logger.debug(f"Applied codex filter: {legal_practices_retriever.search_kwargs['filter']}")
-    else:
-        legal_practices_retriever.search_kwargs.pop("filter", None)
-        logger.debug("No codex filter applied.")
-
-    relevant_docs = legal_practices_retriever.batch(inputs["queries"])
-    logger.info(f"Retrieved {len(relevant_docs)} documents.")
-    return {"relevant_docs": relevant_docs, "orig_query": inputs["queries"][0]}
-
-
-@traceable
-def prepare_docs(inputs) -> dict:
-    """
-    Post-proce1ssing of retrieved relevant docs.
+    Post-processing of retrieved relevant legal practices and docs.
     Steps:
-        1. Picks up the most relevant docs for each query w/o duplicates
-        2. Add `theme` from metadata of doc to its content
-        3. Merges all docs in one string
+        1. Legal practices:
+            a. Picks up the most relevant doc for each query (3) w/o duplicates
+            b. Add 'theme' from metadata of doc to its content
+            c. Merge
+        2. Legal docs (codexes and laws):
+            a. Picks up the most relevant doc for each query (3) w/o duplicates
+            b. Add doc 'title' from metadata of doc to its content
+            c. Merge
+        3. Final merge of 3 legal practices and 3 legal docs
 
     Params:
-        `inputs` - output from previous LangChain Runnable in chain
+        `retrieve_results` - combine retrive results from ensemble retriever of 2 vector DB
     """
-    logger.info("Preparing documents by post-processing retrieved results.")
-    relevant_docs = inputs["relevant_docs"]
-    # Pick top document for each query without duplicates
-    seen_uids = set()
-    top_docs = []
+    # 1. Legal practices
 
-    for query_docs in relevant_docs:  # relevant_docs is a list of lists (docs per query)
+    # Pick top document for each query without duplicates
+    texts = set()
+    # retrieve_results['practice'] is a list of lists (docs per query)
+    for query_docs in retrieve_results["practice"]:
         for doc in query_docs:
-            uid: str = doc.metadata.get("uid")
-            if uid not in seen_uids:
-                seen_uids.add(uid)
-                top_docs.append(doc)
+            doc_text = f"{doc.metadata.get('theme', '')}\n{doc.page_content}"
+            if doc_text not in texts:
+                texts.add(doc_text)
                 break
 
-    # Merge `theme` into `page_content`
-    for doc in top_docs:
-        theme = doc.metadata.get("theme", "")
-        doc.page_content = f"{theme}\n{doc.page_content}"
-    
     # Merge all docs
-    context = "\n\n".join(doc.page_content for doc in top_docs)
-    logger.info("Documents prepared and merged into context.")
-    return {"context": context, "orig_query": inputs["orig_query"]}
+    practices_context = "\n\n".join(t for t in texts)
+
+    # 2. Legal docs
+
+    # Pick top document for each query without duplicates
+    texts = set()
+    # retrieve_results['docs'] is a list of lists (docs per query)
+    for query_docs in retrieve_results["docs"]:
+        for doc in query_docs:
+            doc_text = f"{doc.metadata.get('title', '')}\n{doc.page_content}"
+            if doc_text not in texts:
+                texts.add(doc_text)
+                break
+
+    # Merge all docs
+    docs_context = "\n\n".join(t for t in texts)
+
+    # 3. Final merge
+    context = f"<Похожие судебные дела>:\n{practices_context}\n<Похожие юридические документы>:\n{docs_context}"
+
+    return {"context": context, "query": mem["query"]}
 
 
-logger.info("Loading system prompt for final generation.")
-with open("/app/app/legal_agent/prompts/system_prompt_2.txt") as f:
-    system_prompt_2 = f.read()
-
-prompt_2 = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt_2),
-        ("user", "{orig_query}\n===\n{context}"),
-    ]
+retrieval_chain = (
+    RunnableParallel(
+        {"practice": practices_ensemble_retriever.batch, "docs": docs_ensemble_retriever.batch}
+    )
+    | context_post_processing
 )
 
-llm_2 = ChatMistralAI(**models_settings["llm"], streaming=True)
+# STEP 2-1-2: Legal assistance generation
 
-chain_2 = (
-    RunnableLambda(create_queries)
-    | RunnableLambda(batch_query)
-    | RunnableLambda(prepare_docs)
-    | prompt_2
-    | llm_2
+# Queries generation model
+legal_gen_llm = ChatMistralAI(
+    api_key=settings.MISTRAL_API_KEY,
+    model_name="mistral-large-latest",
+    temperature=0.7,
+    streaming=True,
 )
+
+# Load system prompt
+with open("/app/app/legal_agent/prompts/legal_gen_prompt.txt", "r") as f:
+    legal_gen_prompt = PromptTemplate.from_template(f.read())
+
+legal_gen = legal_gen_prompt | check_rps | legal_gen_llm
+
+# FULL CHAIN
+
+rag_chain = queries_gen_chain | retrieval_chain | legal_gen
 
 
 @traceable
-def route(inputs) -> str | Runnable:
+def route(cls_res):
     """
-    Swithes behavior of pipeline based on query classification:
-        1. If LLM classify query as chit-chat - we just return the text response without doing RAG
-        2. Otherwise, if query belongs to legal field - execute `chain_2` for RAG
-
-    Params:
-        `inputs` - output from previous LangChain Runnable in chain
+    Route execution based on classification step.
     """
-    logger.info("Routing query based on classification.")
-    resp = inputs.get("response_1", None)
-    if not resp or not resp.response:
-        return "Пожалуйста, уточните ваш запрос."
-    elif isinstance(resp.response, ChitChatResponse):
-        if resp.response.response is not None:
-            logger.info("Query classified as chit-chat.")
-            return resp.response.response
-    elif isinstance(resp.response, RAGQueries):
-        if resp.response.keyinfo is not None and resp.response.rephrase is not None:
-            logger.info("Query classified as legal; executing chain_2.")
-            return chain_2
-    
-    return "Пожалуйста, уточните ваш запрос."
+    if cls_res.content in ("1", '"1"', "'1'") or (cls_res.content and cls_res.content[0] == "1"):
+        logger.info("Query classified as legal, routing to the RAG pipeline.")
+        return rag_chain
+    else:
+        logger.info("Queary classified as non-legal, so answer without retrieve context from DB.")
+        return non_legal_chat_chain
 
 
-def wrap_input(input):
-    """
-    Little helper function.
-    Wrap the single input into a dictionary with the key 'input'.
-    """
-    return {"query": input}
-
-
-legal_ai_chain = (
-    RunnableLambda(wrap_input)
-    | {"response_1": chain_1, "query": itemgetter("query")}
-    | RunnableLambda(route)
-)
+legal_ai_chain = cls_chain | route

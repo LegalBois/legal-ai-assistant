@@ -22,6 +22,8 @@ chromadb = "^0.5.23"
 tqdm = "^4.67.1"
 langchain-chroma = "^0.1.4"
 langchain-huggingface = "^0.1.2"
+nltk = "^3.9.1"
+rank-bm25 = "^0.2.2"
 
 
 [build-system]

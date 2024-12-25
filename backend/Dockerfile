@@ -52,3 +52,6 @@ VOLUME /app/storage/
 
 # Volume with pre-loaded embedding model
 VOLUME /app/emb_model/
+
+# Gunicorn env
+ENV GUNICORN_CMD_ARGS="--workers=1"
