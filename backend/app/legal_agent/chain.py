@@ -162,7 +162,7 @@ docs_store = Chroma(
 )
 
 nltk.download("punkt_tab")  # Tokenizer for BM-25 retriever
-logger.info("Creating retrievers... (typically ~2-3 min)")
+logger.info("Creating retrievers... (typically ~5 min)")
 
 # For legal practices collection
 practices_simil_retr = practices_store.as_retriever(
