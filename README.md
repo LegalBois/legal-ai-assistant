@@ -1,6 +1,6 @@
 # legal-ai-assistant
 
-[landing](media/landing)
+Демо сайт может быть найден по ссылке: http://147.45.241.38:5173/
 
 ## Description
 
