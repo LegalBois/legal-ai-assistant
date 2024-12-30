@@ -6,7 +6,7 @@
 
 ### [Frontend](/frontend/)
 
-...
+Frontend реализован на `React` с использованием langchain.js
 
 ### [Backend](/backend/)
 
