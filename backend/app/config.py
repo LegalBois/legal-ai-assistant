@@ -1,13 +1,13 @@
 import os
 
-from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
 load_dotenv()
 
+
 class AppSettings(BaseSettings):
-    OPENAI_API_KEY: str
+    MISTRAL_API_KEY: str
 
 
-
-settings = AppSettings()
+settings = AppSettings(MISTRAL_API_KEY=os.getenv("MISTRAL_API_KEY"))

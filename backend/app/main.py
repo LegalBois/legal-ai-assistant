@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from starlette.middleware.cors import CORSMiddleware
 from langserve import add_routes
+from starlette.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.legal_agent.chain import legal_ai_chain
@@ -26,7 +26,8 @@ add_routes(
 )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # for development
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
