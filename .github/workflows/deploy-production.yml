@@ -3,7 +3,7 @@ name: Publish to production server
 on:
   push:
     branches:
-      - main
+      - disable
 
 
 jobs:
@@ -19,7 +19,6 @@ jobs:
           echo "VITE_API_HOST=${{ secrets.VITE_API_HOST }}" >> .env
           echo "VITE_API_VERSION=${{ secrets.VITE_API_VERSION }}" >> .env
           echo "VITE_CLIENT_ID=${{ secrets.VITE_CLIENT_ID }}" >> .env
-          
 
   deploy:
     runs-on: production

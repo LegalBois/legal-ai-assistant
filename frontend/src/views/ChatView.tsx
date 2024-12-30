@@ -6,6 +6,7 @@ import { useChat, useScrollPosition } from '@/hooks';
 import { AppVersion } from '@/components/ui/AppVersion.tsx';
 import { useQueryParams } from '@/hooks/useQueryParams.ts';
 import { prepareUserMessage } from '@/utils/chatUtils.ts';
+import '../styles/loader.css';
 
 type TWidgetBodyProps = {
   className?: string;
@@ -38,7 +39,7 @@ const ChatView: React.FC<TWidgetBodyProps> = ({ className }) => {
     handleScrollToBottom('instant');
   };
 
-  const { isBotTyping, sendMessage, messages, onChatReset, messagesInitiallyLoaded } = useChat(onAddMessage, onHistoryLoad);
+  const { isBotTyping, sendMessage, messages, onChatReset, messagesInitiallyLoaded, isLoading } = useChat(onAddMessage, onHistoryLoad);
 
   useEffect(() => {
     if (isBotTyping) {
@@ -84,6 +85,7 @@ const ChatView: React.FC<TWidgetBodyProps> = ({ className }) => {
       />
       <div className="flex-grow overflow-y-auto">
         <MessageList messages={messages.filter(({ text }) => !!text)} elementRef={elementRef} isTyping={showTypingBubble} />
+        {isLoading && <div className="loader"></div>}
       </div>
       <div>
         <MessageSend onSendMessage={handleSendMessage} onChatReset={onChatReset} />
