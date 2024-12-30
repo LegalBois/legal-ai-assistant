@@ -1,5 +1,7 @@
 # legal-ai-assistant
 
+[landing](media/landing)
+
 ## Description
 
 ### [Frontend](/frontend/)

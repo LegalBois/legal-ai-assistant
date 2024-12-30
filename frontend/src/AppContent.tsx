@@ -6,6 +6,7 @@ import { ChatView, TView, VoiceView } from '@/views';
 import { useView } from '@/views/useViews.tsx';
 import { Toaster } from '@/components/ui/toaster.tsx';
 import { useLocalStorage } from '@/hooks';
+import LawyersLandingPage from "@/views/LandingPage.tsx";
 
 export const AppContent: React.FC = () => {
   const currentView = useAppSelector(selectCurrentView);
@@ -45,10 +46,15 @@ export const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="xs:max-w-widget grid-rows-view relative ml-auto grid h-full max-w-full overflow-hidden bg-blue-900">
-      {content}
-      <div className="absolute top-12 w-full">
-        <Toaster />
+    <div className="flex h-full max-w-full overflow-hidden bg-blue-900">
+      <div className="left-side-content w-3/4 bg-gray-200 p-4">
+        <LawyersLandingPage />
+      </div>
+      <div className="right-side-content flex-grow grid">
+        {content}
+        <div className="absolute top-12 w-full">
+          <Toaster />
+        </div>
       </div>
     </div>
   );
